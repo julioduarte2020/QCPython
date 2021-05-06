@@ -470,7 +470,7 @@ pyplot.show()
 table = pandas.DataFrame({'Latitud':lat, 'Longitud':long, 'Missing data range':missing_data_range})
 table.to_csv(root_out + 'Stations Minimum Temperature Missing Data Range.csv')
 
-#Figure 3
+#Figure 4
 import os
 import pandas
 from pandas.tseries.offsets import DateOffset
@@ -595,8 +595,7 @@ print(min_temp_atypical/min_temp_total)
 print(mean_temp_atypical/mean_temp_total)
 print(max_temp_atypical/max_temp_total)
        
-#Figure 5
-#Filling of missing data
+#Filling of missing data, Figure 6
 import os
 import pandas
 from matplotlib import pyplot
@@ -652,23 +651,41 @@ for i in range(len(L)):
 
 print(missing_filled/total_missing)
     
-#QUALITY INDEX
+#QUALITY INDEX, Figure 11
 import os
 import pandas
 import datetime
 import numpy
 
-root_in = 'D:/Escritorio/Corpoica/Calidad de datos/IDEAM/Temperatura1/'
+def get_station(file):
+    file_split = os.path.splitext(file)
+    tokenize = file_split[0].split('_')
+    return tokenize[0]
 
+root = 'D:/Escritorio/Corpoica/Calidad de datos/'
+root_in = root  + 'IDEAM/Temperatura1/'
+L = os.listdir(root_in)
+CNE = pandas.read_excel(root +'CNE_IDEAM.xls', index_col = 0, dtype={'CODIGO': str})
+
+regions = ['Pacifico', 'Caribe', 'Orinoco', 'Amazonas', 'Magdalena Cauca']
+
+L0 = []
+for i in range(len(L)):
+    station = get_station(L[i])
+    row = CNE[CNE['CODIGO'] == station]
+    if not(row.empty):
+        row.reset_index(drop=True, inplace=True)
+        region = row.loc[0,'AREA_HIDROGRAFICA']
+        if region == regions[4]: L0.append(L[i])
+            
 start = datetime.datetime(1980,1,1)
 end = datetime.datetime(2019,12,31)
 total_days = (end-start).days 
-L = os.listdir(root_in)
 
 #Percentage of days in the 1980 to 2019 range
 P = []
-for i in range(len(L)):
-    table = pandas.read_csv(root_in + L[i], index_col=0)
+for i in range(len(L0)):
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
     table['time'] = pandas.to_datetime(table['time'])
     boolean = (table['time']>=start) & (table['time']<=end)
     subtable = table[boolean]
@@ -680,16 +697,14 @@ for i in range(len(L)):
     for j in range(subtable.shape[0]):
         if subtable.loc[j,'vals'] < 99999.0: days += 1.0
     P.append(days/total_days*100)
-    print(str(i) + ': ' +L[i])
+    print(str(i) + ': ' +L0[i])
 
 P = numpy.asarray(P)
-P = P.mean()
-print(P)
 
 #Percentage of gaps
 Qgaps = []
-for i in range(len(L)):
-    table = pandas.read_csv(root_in + L[i], index_col=0)
+for i in range(len(L0)):
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
     table['time'] = pandas.to_datetime(table['time'])
     ngap = 0
     max_length = 0
@@ -702,16 +717,14 @@ for i in range(len(L)):
         else: length = 0
         if length > max_length: max_length = length
     Qgaps.append(100 - 100*((2*ngap+max_length)/n))
-    print(str(i) + ': ' +L[i])
+    print(str(i) + ': ' +L0[i])
     
 Qgaps = numpy.asarray(Qgaps)
-Qgaps = Qgaps.mean()
-print(Qgaps)
 
 #Percentage of outliers
 Qoutliers = []
-for i in range(len(L)):
-    table = pandas.read_csv(root_in + L[i], index_col=0)
+for i in range(len(L0)):
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
     n = table.shape[0]
     cond = table['Extremes'] > 0
     cond = cond | (table['DRI'] > 0)
@@ -734,15 +747,15 @@ for i in range(len(L)):
        continue
     nout = subtable.shape[0]
     Qoutliers.append(100 - 100*(nout/n))
-    print(str(i) + ': ' +L[i])
+    print(str(i) + ': ' +L0[i])
     
 Qoutliers = numpy.asarray(Qoutliers)
-Qoutliers = Qoutliers.mean()
-print(Qoutliers)
 
 Q = (P+Qgaps+Qoutliers)/3
+print('Q_mean: ' + str(Q.mean()))
+print('Q_std: ' + str(Q.std()/(Q.shape[0] ** 0.5)))
 
-#QUALITY INDEX 2, Figure 4a
+#QUALITY INDEX, Figure 8a
 import os
 import pandas
 import datetime
@@ -750,11 +763,11 @@ import numpy
 from matplotlib import pyplot
 
 root_in = 'D:/Escritorio/Corpoica/Calidad de datos/IDEAM/Temperatura1/'
+L = os.listdir(root_in)
 
 start = datetime.datetime(1980,1,1)
 end = datetime.datetime(2019,12,31)
 total_days = (end-start).days 
-L = os.listdir(root_in)
 
 Qrange=numpy.arange(40,101,5)
 nstations = numpy.zeros(Qrange.size)
@@ -821,7 +834,7 @@ pyplot.ylabel('Percentage of stations (%)')
 pyplot.title('Temperature')
 pyplot.show()
 
-#Figure 5a
+#Figure 9
 import os
 import pandas
 import datetime
@@ -910,6 +923,108 @@ pyplot.ylabel('Stations')
 pyplot.title('Temperature')
 pyplot.legend()
 pyplot.show() 
+
+#Percentage of error krigging interpolation
+import pandas
+import os
+import numpy
+from pyproj import Proj
+from pykrige.ok3d import OrdinaryKriging3D
+from random import seed
+from random import randint
+seed(1)
+
+def get_station(file):
+    file_split = os.path.splitext(file)
+    tokenize = file_split[0].split('_')
+    return (tokenize[0],tokenize[1])
+
+root = 'D:/Escritorio/Corpoica/Calidad de datos/'
+root_in = root + 'IDEAM/Temperatura2/'
+L = os.listdir(root_in)
+p = Proj(proj='utm',zone=18,ellps='WGS84')
+CNE = pandas.read_excel(root + 'CNE_IDEAM.xls', index_col=0, dtype={'CODIGO': str})
+selected_files = []
+for i in range(100):
+    selected_files.append(L[randint(0,len(L)-1)])
+
+errors = []
+for i in range(len(selected_files)):
+    table = pandas.read_csv(root_in + selected_files[i], index_col=0)
+    table['time'] = pandas.to_datetime(table['time'])
+    (station,kind) = get_station(selected_files[i])
+    print(str(i) + ': ' +selected_files[i])
+    row = CNE[CNE['CODIGO'] == station]
+    if (row.empty): continue
+    row.reset_index(drop=True, inplace=True)
+    lat = row.loc[0,'latitud']
+    long = row.loc[0,'longitud']
+    x,y = p(long, lat)
+    H = row.loc[0,'altitud']
+    neighbors = []
+    coords = []
+    for j in range(len(L)):
+        (station2,kind2) = get_station(L[j])
+        if station == station2: continue
+        if kind == kind2:
+            row2 = CNE[CNE['CODIGO'] == station2]
+            if not(row2.empty):
+                row2.reset_index(drop=True, inplace=True)
+                lat2 = row2.loc[0,'latitud']
+                long2 = row2.loc[0,'longitud']
+                x2,y2 = p(long2, lat2)
+                H2 = row2.loc[0,'altitud']
+                if abs(H-H2) <= 100:
+                    D = ((x-x2)**2 + (y-y2)**2)**0.5
+                    if D <= 200000: 
+                        neighbors.append(L[j])
+                        coords.append((x2,y2,H2))
+    if len(neighbors) >= 3:
+        neighbors_list = []
+        for j in range(len(neighbors)):
+            neighbors_list.append( pandas.read_csv(root_in + neighbors[j], index_col=0) )
+            neighbors_list[j]['time'] = pandas.to_datetime(neighbors_list[j]['time'])
+    else: continue
+    subtable = table[table['vals'] < 99999.0].copy()
+    subtable.reset_index(drop=True, inplace=True)
+    length = subtable.shape[0]
+    for j in range(200):
+        index = randint(0,length-1)
+        val = subtable.loc[index,'vals']
+        date = subtable.loc[index,'time'] 
+        x_n = []
+        y_n = []
+        H_n = []
+        val_n = []
+        for n in range(len(neighbors_list)):
+            row_date = neighbors_list[n][neighbors_list[n]['time'] == date]
+            if row_date.empty: continue
+            row_date.reset_index(drop=True, inplace=True)
+            val2 = row_date.loc[0,'vals']
+            if val2 >= 99999.0: continue
+            x_n.append(coords[n][0])
+            y_n.append(coords[n][1])
+            H_n.append(coords[n][2])
+            val_n.append(val2)
+        if len(x_n) < 3: continue
+        x_n = numpy.asarray(x_n)
+        y_n = numpy.asarray(y_n)
+        H_n = numpy.asarray(H_n)
+        val_n = numpy.asarray(val_n)
+        if numpy.std(val_n)>0.01:
+            try:
+                ok3d = OrdinaryKriging3D(x_n, y_n, H_n, val_n, variogram_model="linear")
+                val_hat,ss3d = ok3d.execute("points", x, y, H)
+                if val_hat.data[0] < 0.0 or val_hat.data[0] > 50: continue
+                val_estimated = round(val_hat.data[0],1)
+            except: continue
+        else: val_estimated = numpy.median(val_n)
+        error = abs(val - val_estimated) / val * 100
+        errors.append(error)
+
+errors = numpy.asarray(errors)
+print('% Error: ' + str(errors.mean()))
+print('std_dev: ' + str(errors.std() / (errors.shape[0] ** 0.5)))
        
 #Probability false negatives
 import pandas
@@ -1352,19 +1467,19 @@ for i in range(len(selected_files)):
         H = row.loc[0,'altitud']
         neighbors = []
         for j in range(len(L)):
-            if i != j:
-                (station2,kind2) = get_station(L[j])
-                if kind == kind2:
-                    row2 = CNE[CNE['CODIGO'] == station2]
-                    if not(row2.empty):
-                        row2.reset_index(drop=True, inplace=True)
-                        lat2 = row2.loc[0,'latitud']
-                        long2 = row2.loc[0,'longitud']
-                        x2,y2 = p(long2, lat2)
-                        H2 = row2.loc[0,'altitud']
-                        if abs(H-H2) <= 100:
-                            D = math.sqrt((x-x2)**2 + (y-y2)**2)
-                            if D <= 200000: neighbors.append(L[j])
+            (station2,kind2) = get_station(L[j])
+            if station == station2: continue
+            if kind == kind2:
+                row2 = CNE[CNE['CODIGO'] == station2]
+                if not(row2.empty):
+                    row2.reset_index(drop=True, inplace=True)
+                    lat2 = row2.loc[0,'latitud']
+                    long2 = row2.loc[0,'longitud']
+                    x2,y2 = p(long2, lat2)
+                    H2 = row2.loc[0,'altitud']
+                    if abs(H-H2) <= 100:
+                        D = math.sqrt((x-x2)**2 + (y-y2)**2)
+                        if D <= 200000: neighbors.append(L[j])
         if len(neighbors) >= 2:
             table_list = []
             for j in range(len(neighbors)):
@@ -1709,7 +1824,67 @@ for i in range(len(L)):
 probability_false_positives = cont2/cont
 print('probability false positives: '+ str(probability_false_positives)) 
 
-       
+#Table 3
+import os
+import pandas
+import datetime
+import numpy
+
+def get_station(file):
+    file_split = os.path.splitext(file)
+    tokenize = file_split[0].split('_')
+    return tokenize[0]
+
+root = 'D:/Escritorio/Corpoica/Calidad de datos/'
+root_in = root + 'IDEAM/Temperatura1/'
+L = os.listdir(root_in)
+
+start = datetime.datetime(1980,1,1)
+end = datetime.datetime(2019,12,31)
+
+CNE = pandas.read_excel(root +'CNE_IDEAM.xls', index_col = 0, dtype={'CODIGO': str})
+
+regions = ['Pacifico', 'Caribe', 'Orinoco', 'Amazonas', 'Magdalena Cauca']
+
+L0 = []
+for i in range(len(L)):
+    station = get_station(L[i])
+    row = CNE[CNE['CODIGO'] == station]
+    if not(row.empty):
+        row.reset_index(drop=True, inplace=True)
+        region = row.loc[0,'AREA_HIDROGRAFICA']
+        if region == regions[4]: L0.append(L[i])
+
+cont = 0
+controls = numpy.zeros(15)
+for i in range(len(L0)):
+    print(str(i) + ': ' +L0[i])
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
+    table['time'] = pandas.to_datetime(table['time'])
+    subtable = table[(table['time']>=start) & (table['time']<=end)]
+    subtable.reset_index(drop=True, inplace=True)
+    cont += subtable.shape[0]
+    controls[0] += subtable['Extremes'].sum()
+    controls[1] += subtable['DRI'].sum()
+    controls[2] += subtable['biweigth'].sum()
+    controls[3] += subtable['DCE'].sum()
+    controls[4] += subtable['Persistence'].sum()
+    controls[5] += subtable['Excesive Jumps'].sum()
+    controls[6] += subtable['Peaks'].sum()
+    controls[7] += subtable['Consistency 1'].sum()
+    controls[8] += subtable['Consistency 2'].sum()
+    controls[9] += subtable['Consistency 3'].sum()
+    controls[10] += subtable['Consistency 4'].sum()
+    controls[11] += subtable['Amplitud Termica'].sum()
+    controls[12] += subtable['Spatial Linear Regression'].sum()
+    controls[13] += subtable['Spatial Concordance Index'].sum()
+    controls[14] += subtable['Spatial Corroboration'].sum()
+
+print(cont)
+for i in range(15):
+    print(controls[i]/cont*100)
+   
+        
                                 #################
                                 # PRECIPITATION #
                                 #################
@@ -1882,7 +2057,7 @@ for i in range(len(L)):
 average_dist = numpy.asarray(average_dist)
 print('average distance: ' + str(average_dist.mean()))  
  
-#Figure 1
+#Figure 1b
 from matplotlib import pyplot
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
@@ -1923,7 +2098,7 @@ root_out = 'D:/Escritorio/Corpoica/Calidad de datos/IDEAM/'
 table = pandas.DataFrame({'Latitud':lat, 'Longitud':long, 'Years range':years_range})
 table.to_csv(root_out + 'Stations Precipitation Range.csv')
 
-#Figure 2        
+#Figure 2b        
 import os
 import pandas
 from datetime import date
@@ -1992,7 +2167,7 @@ root_out = 'D:/Escritorio/Corpoica/Calidad de datos/IDEAM/'
 table = pandas.DataFrame({'Latitud':lat, 'Longitud':long, 'Missing data range':missing_data_range})
 table.to_csv(root_out + 'Stations Precipitation Missing Data Range.csv')
 
-#Figure 4
+#Figure 5 (DRI)
 import os
 import pandas
 from calendar import monthrange
@@ -2075,8 +2250,7 @@ for i in range(len(L)):
     
 print(atypical/total)
 
-#Figure 6
-#Filling of missing data
+#Filling of missing data, Figure 7
 import os
 import pandas
 from matplotlib import pyplot
@@ -2132,23 +2306,41 @@ for i in range(len(L)):
 
 print(missing_filled/total_missing)
 
-#QUALITY INDEX
+#QUALITY INDEX BY REGIONS, Fig. 12
 import os
 import pandas
 import datetime
 import numpy
 
-root_in = 'D:/Escritorio/Corpoica/Calidad de datos/IDEAM/Precipitacion1/'
+def get_station(file):
+    file_split = os.path.splitext(file)
+    tokenize = file_split[0].split('_')
+    return tokenize[0]
+
+root = 'D:/Escritorio/Corpoica/Calidad de datos/'
+root_in = root  + 'IDEAM/Precipitacion1/'
+L = os.listdir(root_in)
+CNE = pandas.read_excel(root +'CNE_IDEAM.xls', index_col = 0, dtype={'CODIGO': str})
+
+regions = ['Pacifico', 'Caribe', 'Orinoco', 'Amazonas', 'Magdalena Cauca']
+
+L0 = []
+for i in range(len(L)):
+    station = get_station(L[i])
+    row = CNE[CNE['CODIGO'] == station]
+    if not(row.empty):
+        row.reset_index(drop=True, inplace=True)
+        region = row.loc[0,'AREA_HIDROGRAFICA']
+        if region == regions[4]: L0.append(L[i])
 
 start = datetime.datetime(1980,1,1)
 end = datetime.datetime(2019,12,31)
 total_days = (end-start).days 
-L = os.listdir(root_in)
 
 #Percentage of days in the 1980 to 2019 range
 P = []
-for i in range(len(L)):
-    table = pandas.read_csv(root_in + L[i], index_col=0)
+for i in range(len(L0)):
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
     table['time'] = pandas.to_datetime(table['time'])
     boolean = (table['time']>=start) & (table['time']<=end)
     subtable = table[boolean]
@@ -2160,16 +2352,14 @@ for i in range(len(L)):
     for j in range(subtable.shape[0]):
         if subtable.loc[j,'vals'] < 99999.0: days += 1.0
     P.append(days/total_days*100)
-    print(str(i) + ': ' +L[i])
+    print(str(i) + ': ' +L0[i])
 
 P = numpy.asarray(P)
-P = P.mean()
-print(P)
 
 #Percentage of gaps
 Qgaps = []
-for i in range(len(L)):
-    table = pandas.read_csv(root_in + L[i], index_col=0)
+for i in range(len(L0)):
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
     table['time'] = pandas.to_datetime(table['time'])
     ngap = 0
     max_length = 0
@@ -2182,18 +2372,16 @@ for i in range(len(L)):
         else: length = 0
         if length > max_length: max_length = length
     Qgaps.append(100 - 100*((2*ngap+max_length)/n))
-    print(str(i) + ': ' +L[i])
+    print(str(i) + ': ' +L0[i])
     
 Qgaps = numpy.asarray(Qgaps)
-Qgaps = Qgaps.mean()
-print(Qgaps)
 
 #percentage of non-null accumulated precipitation on each month
 Qnon_null = []
-for i in range(len(L)):
-    table = pandas.read_csv(root_in + L[i], index_col=0)
+for i in range(len(L0)):
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
     table['time'] = pandas.to_datetime(table['time'])
-    print(str(i) + ': ' +L[i])
+    print(str(i) + ': ' +L0[i])
     first_year = table.loc[0,'time'].year
     last_year = table.loc[table.shape[0]-1,'time'].year
     current_year = first_year
@@ -2221,15 +2409,13 @@ for i in range(len(L)):
     Qnon_null.append(100 - 100*m0/m)    
 
 Qnon_null = numpy.asarray(Qnon_null)
-Qnon_null = Qnon_null.mean()
-print(Qnon_null)
 
 #percentaje Coefficient of variation
 QCV = []
-for i in range(len(L)):
-    table = pandas.read_csv(root_in + L[i], index_col=0)
+for i in range(len(L0)):
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
     table['time'] = pandas.to_datetime(table['time'])
-    print(str(i) + ': ' +L[i])
+    print(str(i) + ': ' +L0[i])
     first_year = table.loc[0,'time'].year
     last_year = table.loc[table.shape[0]-1,'time'].year
     current_year = first_year
@@ -2260,13 +2446,11 @@ for i in range(len(L)):
     QCV.append(100 - 100*CV)    
 
 QCV = numpy.asarray(QCV)
-QCV = QCV.mean()
-print(QCV)
 
 #Percentage of outliers
 Qoutliers = []
-for i in range(len(L)):
-    table = pandas.read_csv(root_in + L[i], index_col=0)
+for i in range(len(L0)):
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
     n = table.shape[0]
     cond = table['Extremes'] > 0
     cond = cond | (table['DRI'] > 0)
@@ -2280,15 +2464,15 @@ for i in range(len(L)):
        continue
     nout = subtable.shape[0]
     Qoutliers.append(100 - 100*(nout/n))
-    print(str(i) + ': ' +L[i])
+    print(str(i) + ': ' +L0[i])
     
 Qoutliers = numpy.asarray(Qoutliers)
-Qoutliers = Qoutliers.mean()
-print(Qoutliers)
 
 Q = (P+Qgaps+Qnon_null+QCV+Qoutliers)/5
+print('Q_mean: ' + str(Q.mean()))
+print('Q_std: ' + str(Q.std()/(Q.shape[0] ** 0.5)))
 
-#QUALITY INDEX 2, Figure 4b
+#QUALITY INDEX 2, Figure 8b
 import os
 import pandas
 import datetime
@@ -2410,7 +2594,7 @@ pyplot.ylabel('Percentage of stations (%)')
 pyplot.title('Precipitation')
 pyplot.show()
 
-#Figure 5b
+#Figure 10
 import os
 import pandas
 import datetime
@@ -2543,6 +2727,112 @@ pyplot.title('Precipitation')
 pyplot.legend()
 pyplot.show() 
 
+#Percentage of error krigging interpolation
+import pandas
+import os
+import numpy
+from pyproj import Proj
+from pykrige.ok3d import OrdinaryKriging3D
+from random import seed
+from random import randint
+import math
+seed(1)
+
+def get_station(file):
+    file_split = os.path.splitext(file)
+    tokenize = file_split[0].split('_')
+    return tokenize[0]
+
+root = 'D:/Escritorio/Corpoica/Calidad de datos/'
+root_in = root + 'IDEAM/Precipitacion2/'
+L = os.listdir(root_in)
+p = Proj(proj='utm',zone=18,ellps='WGS84')
+CNE = pandas.read_excel(root + 'CNE_IDEAM.xls', index_col=0, dtype={'CODIGO': str})
+selected_files = []
+for i in range(100):
+    selected_files.append(L[randint(0,len(L)-1)])
+
+errors = []
+for i in range(len(selected_files)):
+    table = pandas.read_csv(root_in + selected_files[i], index_col=0)
+    table['time'] = pandas.to_datetime(table['time'])
+    station = get_station(selected_files[i])
+    print(str(i) + ': ' +selected_files[i])
+    row = CNE[CNE['CODIGO'] == station]
+    if (row.empty): continue
+    row.reset_index(drop=True, inplace=True)
+    lat = row.loc[0,'latitud']
+    long = row.loc[0,'longitud']
+    x,y = p(long, lat)
+    H = row.loc[0,'altitud']
+    neighbors = []
+    coords = []
+    for j in range(len(L)):
+        station2 = get_station(L[j])
+        if station == station2: continue
+        row2 = CNE[CNE['CODIGO'] == station2]
+        if not(row2.empty):
+            row2.reset_index(drop=True, inplace=True)
+            lat2 = row2.loc[0,'latitud']
+            long2 = row2.loc[0,'longitud']
+            x2,y2 = p(long2, lat2)
+            H2 = row2.loc[0,'altitud']
+            if abs(H-H2) <= 100:
+                D = ((x-x2)**2 + (y-y2)**2)**0.5
+                if D <= 200000: 
+                    neighbors.append(L[j])
+                    coords.append((x2,y2,H2))
+    if len(neighbors) >= 3:
+        neighbors_list = []
+        for j in range(len(neighbors)):
+            neighbors_list.append( pandas.read_csv(root_in + neighbors[j], index_col=0) )
+            neighbors_list[j]['time'] = pandas.to_datetime(neighbors_list[j]['time'])
+    else: continue
+    subtable = table[table['vals'] < 99999.0].copy()
+    subtable.reset_index(drop=True, inplace=True)
+    length = subtable.shape[0]
+    for j in range(200):
+        index = randint(0,length-1)
+        val = subtable.loc[index,'vals']
+        date = subtable.loc[index,'time'] 
+        x_n = []
+        y_n = []
+        H_n = []
+        val_n = []
+        for n in range(len(neighbors_list)):
+            row_date = neighbors_list[n][neighbors_list[n]['time'] == date]
+            if row_date.empty: continue
+            row_date.reset_index(drop=True, inplace=True)
+            val2 = row_date.loc[0,'vals']
+            if val2 >= 99999.0: continue
+            x_n.append(coords[n][0])
+            y_n.append(coords[n][1])
+            H_n.append(coords[n][2])
+            val_n.append(val2)
+        if len(x_n) < 3: continue
+        x_n = numpy.asarray(x_n)
+        y_n = numpy.asarray(y_n)
+        H_n = numpy.asarray(H_n)
+        val_n = numpy.asarray(val_n)
+        if numpy.std(val_n)>0.01:
+            try:
+                ok3d = OrdinaryKriging3D(x_n, y_n, H_n, val_n, variogram_model="linear")
+                val_hat,ss3d = ok3d.execute("points", x, y, H)
+                if math.copysign(1,val_hat.data[0]) >= 0.0: 
+                    if val_hat.data[0] > 200: continue
+                    val_estimated = round(val_hat.data[0],1)
+                else: val_estimated = 0.0
+                val_estimated = round(val_hat.data[0],1)
+            except: continue
+        else: val_estimated = numpy.median(val_n)
+        if val > 0: error = abs(val - val_estimated) / val * 100
+        else: error = val_estimated * 100
+        errors.append(error)
+        
+errors = numpy.asarray(errors)
+print('% Error: ' + str(errors.mean()))
+print('std_dev: ' + str(errors.std() / (errors.shape[0] ** 0.5)))
+
 #Probability false negatives 
 import pandas
 from pandas.tseries.offsets import DateOffset
@@ -2644,20 +2934,20 @@ for i in range(len(selected_files)):
         neighbors = []
         distance = []
         for j in range(len(L)):
-            if i != j:
-                station2 = get_station(L[j])
-                row2 = CNE[CNE['CODIGO'] == station2]
-                if not(row2.empty):
-                    row2.reset_index(drop=True, inplace=True)
-                    lat2 = row2.loc[0,'latitud']
-                    long2 = row2.loc[0,'longitud']
-                    x2,y2 = p(long2, lat2)
-                    H2 = row2.loc[0,'altitud']
-                    if abs(H-H2) <= 100:
-                       D = math.sqrt((x-x2)**2 + (y-y2)**2)
-                       if D <= 200000: 
-                           neighbors.append(L[j])
-                           distance.append(D)
+            station2 = get_station(L[j])
+            if station == station2: continue
+            row2 = CNE[CNE['CODIGO'] == station2]
+            if not(row2.empty):
+                row2.reset_index(drop=True, inplace=True)
+                lat2 = row2.loc[0,'latitud']
+                long2 = row2.loc[0,'longitud']
+                x2,y2 = p(long2, lat2)
+                H2 = row2.loc[0,'altitud']
+                if abs(H-H2) <= 100:
+                   D = math.sqrt((x-x2)**2 + (y-y2)**2)
+                   if D <= 200000: 
+                       neighbors.append(L[j])
+                       distance.append(D)
         if len(neighbors) >= 2:
             if len(neighbors) > 7:
                 distance = numpy.asarray(distance)
@@ -2770,3 +3060,54 @@ for i in range(len(L)):
 
 probability_false_positives = cont2/cont
 print('probability false positives: '+ str(probability_false_positives)) 
+
+#Table 4
+import os
+import pandas
+import datetime
+import numpy
+
+def get_station(file):
+    file_split = os.path.splitext(file)
+    tokenize = file_split[0].split('_')
+    return tokenize[0]
+
+root = 'D:/Escritorio/Corpoica/Calidad de datos/'
+root_in = root + 'IDEAM/Precipitacion1/'
+L = os.listdir(root_in)
+
+start = datetime.datetime(1980,1,1)
+end = datetime.datetime(2019,12,31)
+
+CNE = pandas.read_excel(root +'CNE_IDEAM.xls', index_col = 0, dtype={'CODIGO': str})
+
+regions = ['Pacifico', 'Caribe', 'Orinoco', 'Amazonas', 'Magdalena Cauca']
+
+L0 = []
+for i in range(len(L)):
+    station = get_station(L[i])
+    row = CNE[CNE['CODIGO'] == station]
+    if not(row.empty):
+        row.reset_index(drop=True, inplace=True)
+        region = row.loc[0,'AREA_HIDROGRAFICA']
+        if region == regions[4]: L0.append(L[i])
+
+cont = 0
+controls = numpy.zeros(6)
+for i in range(len(L0)):
+    print(str(i) + ': ' +L0[i])
+    table = pandas.read_csv(root_in + L0[i], index_col=0)
+    table['time'] = pandas.to_datetime(table['time'])
+    subtable = table[(table['time']>=start) & (table['time']<=end)]
+    subtable.reset_index(drop=True, inplace=True)
+    cont += subtable.shape[0]
+    controls[0] += subtable['Extremes'].sum()
+    controls[1] += subtable['DRI'].sum()
+    controls[2] += subtable['DGD'].sum()
+    controls[3] += subtable['Persistencia'].sum()
+    controls[4] += subtable['PEDSP'].sum()
+    controls[5] += subtable['Spatial Corroboration'].sum()
+
+print(cont)
+for i in range(6):
+    print(controls[i]/cont*100)    
