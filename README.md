@@ -1,2 +1,2 @@
 # QCPython
-Qaulity Control and data filling files in Python
+Quality Control and data filling files in Python
